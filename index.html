@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dalal Street Paper Trader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bull: '#10B981', // Emerald 500
+                        bear: '#EF4444', // Red 500
+                        darkbg: '#111827', // Gray 900
+                        card: '#1F2937', // Gray 800
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for tables */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1F2937; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4B5563; }
+        
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3B82F6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-darkbg text-gray-100 font-sans antialiased min-h-screen p-4 md:p-8">
+
+    <header class="max-w-7xl mx-auto flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+        <div>
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                <i class="fa-solid fa-chart-line mr-2 text-blue-400"></i>Dalal Street <span class="text-white text-lg font-light">Paper Trader</span>
+            </h1>
+            <p class="text-gray-400 text-sm mt-1">NSE Real-time Simulation</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <div id="marketStatus" class="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800 text-xs font-semibold border border-gray-700">
+                <span class="w-2 h-2 rounded-full bg-gray-500"></span> CHECKING...
+            </div>
+            <button onclick="app.resetPortfolio()" class="text-xs text-red-400 hover:text-red-300 underline">Reset Data</button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <div class="lg:col-span-1 space-y-6">
+            
+            <div class="bg-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                <h2 class="text-gray-400 text-sm uppercase tracking-wider font-semibold mb-4">Portfolio Summary</h2>
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-gray-400 text-xs">Available Cash</p>
+                        <p class="text-2xl font-bold font-mono text-white" id="dispCash">₹0.00</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-gray-400 text-xs">Invested Value</p>
+                            <p class="text-lg font-bold font-mono text-blue-400" id="dispInvested">₹0.00</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 text-xs">Total P&L</p>
+                            <p class="text-lg font-bold font-mono" id="dispTotalPnL">₹0.00</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-card p-6 rounded-xl border border-gray-700 shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-white font-bold text-lg">Place Order</h2>
+                    <span id="priceLoader" class="hidden"><div class="loader"></div></span>
+                </div>
+
+                <div class="flex mb-4 bg-gray-900 rounded p-1">
+                    <button onclick="app.setOrderType('BUY')" id="btnTabBuy" class="flex-1 py-1 rounded text-sm font-bold bg-bull text-white transition-all">BUY</button>
+                    <button onclick="app.setOrderType('SELL')" id="btnTabSell" class="flex-1 py-1 rounded text-sm font-bold text-gray-400 hover:text-white transition-all">SELL</button>
+                </div>
+
+                <form id="tradeForm" onsubmit="event.preventDefault(); app.executeTrade();" class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Ticker Symbol (NSE)</label>
+                        <div class="relative">
+                            <input type="text" id="inputTicker" placeholder="e.g. RELIANCE" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 focus:outline-none uppercase font-mono" required onblur="app.fetchQuote(this.value, true)">
+                            <div class="absolute right-3 top-2.5 text-xs text-gray-500 font-mono">.NS</div>
+                        </div>
+                        <p id="livePriceDisplay" class="text-xs mt-1 h-4 font-mono text-right text-gray-400"></p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Quantity</label>
+                        <input type="number" id="inputQty" placeholder="0" min="1" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white focus:border-blue-500 focus:outline-none font-mono" required oninput="app.calculateEstimatedTotal()">
+                    </div>
+
+                    <div class="p-3 bg-gray-900 rounded border border-gray-700 flex justify-between items-center">
+                        <span class="text-xs text-gray-400">Est. Total</span>
+                        <span id="estTotal" class="font-mono font-bold text-white">₹0.00</span>
+                    </div>
+
+                    <button type="submit" id="btnSubmit" class="w-full bg-bull hover:bg-emerald-600 text-white font-bold py-3 rounded transition-colors flex justify-center items-center gap-2">
+                        <span>CONFIRM BUY</span>
+                    </button>
+                    <p id="tradeMsg" class="text-center text-xs h-4"></p>
+                </form>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 space-y-6">
+            
+            <div class="bg-card rounded-xl border border-gray-700 shadow-lg overflow-hidden flex flex-col h-[400px]">
+                <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
+                    <h2 class="font-bold text-white">Active Positions</h2>
+                    <span class="text-xs text-gray-500 italic flex items-center gap-1">
+                        <i class="fa-solid fa-sync fa-spin hidden" id="refreshIcon"></i>
+                        Updates every 10s
+                    </span>
+                </div>
+                <div class="overflow-auto flex-1">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-gray-900 text-gray-400 text-xs uppercase sticky top-0">
+                            <tr>
+                                <th class="p-3">Symbol</th>
+                                <th class="p-3 text-right">Qty</th>
+                                <th class="p-3 text-right">Avg Price</th>
+                                <th class="p-3 text-right">LTP (₹)</th>
+                                <th class="p-3 text-right">Value</th>
+                                <th class="p-3 text-right">P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTableBody" class="text-sm font-mono divide-y divide-gray-700">
+                            <tr><td colspan="6" class="p-4 text-center text-gray-500">No active positions.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-card rounded-xl border border-gray-700 shadow-lg overflow-hidden h-[300px] flex flex-col">
+                <div class="p-4 border-b border-gray-700 bg-gray-800">
+                    <h2 class="font-bold text-white">Order History</h2>
+                </div>
+                <div class="overflow-auto flex-1">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-900 text-gray-400 text-xs uppercase sticky top-0">
+                            <tr>
+                                <th class="p-3">Time</th>
+                                <th class="p-3">Symbol</th>
+                                <th class="p-3">Type</th>
+                                <th class="p-3 text-right">Qty</th>
+                                <th class="p-3 text-right">Price</th>
+                                <th class="p-3 text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody" class="text-sm font-mono divide-y divide-gray-700 text-gray-300">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const app = {
+            data: {
+                cash: 1000000,
+                holdings: {}, // format: { 'TCS': { qty: 10, avgPrice: 3200, currentPrice: 3205 } }
+                history: []
+            },
+            ui: {
+                orderType: 'BUY',
+                currentQuote: null,
+                refreshInterval: null
+            },
+            
+            // --- Initialization ---
+            init: function() {
+                this.loadData();
+                this.updateUI();
+                this.checkMarketStatus();
+                
+                // Start live tracking loop (10 seconds)
+                this.refreshPrices();
+                this.ui.refreshInterval = setInterval(() => this.refreshPrices(), 10000);
+            },
+
+            // --- Persistence ---
+            saveData: function() {
+                localStorage.setItem('paperTrader_data', JSON.stringify(this.data));
+            },
+
+            loadData: function() {
+                const saved = localStorage.getItem('paperTrader_data');
+                if (saved) {
+                    this.data = JSON.parse(saved);
+                }
+            },
+
+            resetPortfolio: function() {
+                if(confirm("Are you sure you want to reset your portfolio to ₹10 Lakhs? This cannot be undone.")) {
+                    this.data = { cash: 1000000, holdings: {}, history: [] };
+                    this.saveData();
+                    this.updateUI();
+                    location.reload();
+                }
+            },
+
+            // --- API Fetching (Yahoo via AllOrigins Proxy) ---
+            fetchStockPrice: async function(symbol) {
+                const cleanSymbol = symbol.toUpperCase().replace('.NS', '') + '.NS';
+                // Using AllOrigins to bypass CORS
+                const proxyUrl = 'https://api.allorigins.win/get?url=';
+                // Yahoo Chart API is more reliable for scraping than Quote API
+                const targetUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?interval=1d&range=1d`);
+                
+                try {
+                    const response = await fetch(proxyUrl + targetUrl);
+                    const data = await response.json();
+                    
+                    if (!data.contents) throw new Error("No data");
+                    
+                    const json = JSON.parse(data.contents);
+                    
+                    if (!json.chart || !json.chart.result || json.chart.result.length === 0) {
+                        return null; // Invalid Symbol
+                    }
+
+                    const meta = json.chart.result[0].meta;
+                    // Prefer regularMarketPrice, fallback to previousClose
+                    const price = meta.regularMarketPrice || meta.chartPreviousClose;
+                    return { price: price, symbol: cleanSymbol.replace('.NS','') };
+
+                } catch (e) {
+                    console.error("Fetch Error:", e);
+                    return null;
+                }
+            },
+
+            // --- Trading Logic ---
+            setOrderType: function(type) {
+                this.ui.orderType = type;
+                const btnBuy = document.getElementById('btnTabBuy');
+                const btnSell = document.getElementById('btnTabSell');
+                const btnSubmit = document.getElementById('btnSubmit');
+
+                if (type === 'BUY') {
+                    btnBuy.className = "flex-1 py-1 rounded text-sm font-bold bg-bull text-white transition-all";
+                    btnSell.className = "flex-1 py-1 rounded text-sm font-bold text-gray-400 hover:text-white transition-all";
+                    btnSubmit.className = "w-full bg-bull hover:bg-emerald-600 text-white font-bold py-3 rounded transition-colors flex justify-center items-center gap-2";
+                    btnSubmit.innerHTML = "<span>CONFIRM BUY</span>";
+                } else {
+                    btnSell.className = "flex-1 py-1 rounded text-sm font-bold bg-bear text-white transition-all";
+                    btnBuy.className = "flex-1 py-1 rounded text-sm font-bold text-gray-400 hover:text-white transition-all";
+                    btnSubmit.className = "w-full bg-bear hover:bg-red-600 text-white font-bold py-3 rounded transition-colors flex justify-center items-center gap-2";
+                    btnSubmit.innerHTML = "<span>CONFIRM SELL</span>";
+                }
+            },
+
+            fetchQuote: async function(ticker, updateUIOnly = false) {
+                if (!ticker) return;
+                
+                const loader = document.getElementById('priceLoader');
+                const priceDisplay = document.getElementById('livePriceDisplay');
+                
+                if(updateUIOnly) loader.classList.remove('hidden');
+
+                const result = await this.fetchStockPrice(ticker);
+                
+                if(updateUIOnly) loader.classList.add('hidden');
+
+                if (result) {
+                    this.ui.currentQuote = result.price;
+                    priceDisplay.innerHTML = `LTP: <span class="text-white">₹${result.price.toFixed(2)}</span>`;
+                    priceDisplay.classList.remove('text-red-500');
+                    if (updateUIOnly) this.calculateEstimatedTotal();
+                    return result.price;
+                } else {
+                    this.ui.currentQuote = null;
+                    priceDisplay.innerHTML = "Invalid Symbol";
+                    priceDisplay.classList.add('text-red-500');
+                    return null;
+                }
+            },
+
+            calculateEstimatedTotal: function() {
+                const qty = parseFloat(document.getElementById('inputQty').value) || 0;
+                const price = this.ui.currentQuote || 0;
+                const total = qty * price;
+                document.getElementById('estTotal').innerText = `₹${total.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+            },
+
+            executeTrade: async function() {
+                const tickerInput = document.getElementById('inputTicker');
+                const qtyInput = document.getElementById('inputQty');
+                const msg = document.getElementById('tradeMsg');
+                
+                const ticker = tickerInput.value.toUpperCase();
+                const qty = parseInt(qtyInput.value);
+
+                if (!ticker || !qty || qty <= 0) {
+                    msg.innerText = "Please enter valid details.";
+                    msg.className = "text-center text-xs h-4 text-red-500";
+                    return;
+                }
+
+                // Show processing state
+                const btn = document.getElementById('btnSubmit');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<div class="loader"></div>';
+
+                // Fetch fresh price before execution
+                const price = await this.fetchQuote(ticker);
+
+                if (!price) {
+                    msg.innerText = "Could not fetch price. Market may be closed or symbol invalid.";
+                    msg.className = "text-center text-xs h-4 text-red-500";
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                const totalValue = price * qty;
+                const type = this.ui.orderType;
+
+                // Validation
+                if (type === 'BUY') {
+                    if (this.data.cash < totalValue) {
+                        msg.innerText = "Insufficient Funds.";
+                        msg.className = "text-center text-xs h-4 text-red-500";
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        return;
+                    }
+                    
+                    // Deduct Cash
+                    this.data.cash -= totalValue;
+                    
+                    // Update Holdings
+                    if (!this.data.holdings[ticker]) {
+                        this.data.holdings[ticker] = { qty: 0, avgPrice: 0 };
+                    }
+                    
+                    const oldQty = this.data.holdings[ticker].qty;
+                    const oldAvg = this.data.holdings[ticker].avgPrice;
+                    const newQty = oldQty + qty;
+                    // Weighted Average Price
+                    const newAvg = ((oldQty * oldAvg) + (qty * price)) / newQty;
+                    
+                    this.data.holdings[ticker].qty = newQty;
+                    this.data.holdings[ticker].avgPrice = newAvg;
+
+                } else { // SELL
+                    if (!this.data.holdings[ticker] || this.data.holdings[ticker].qty < qty) {
+                        msg.innerText = "Insufficient Holdings.";
+                        msg.className = "text-center text-xs h-4 text-red-500";
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    // Add Cash
+                    this.data.cash += totalValue;
+
+                    // Update Holdings
+                    this.data.holdings[ticker].qty -= qty;
+                    if (this.data.holdings[ticker].qty === 0) {
+                        delete this.data.holdings[ticker];
+                    }
+                }
+
+                // Record History
+                this.data.history.unshift({
+                    time: new Date().toLocaleTimeString(),
+                    symbol: ticker,
+                    type: type,
+                    qty: qty,
+                    price: price,
+                    total: totalValue
+                });
+
+                this.saveData();
+                this.updateUI();
+                
+                // Success Feedback
+                msg.innerText = "Order Executed Successfully!";
+                msg.className = "text-center text-xs h-4 text-green-500";
+                
+                // Reset Form
+                qtyInput.value = '';
+                document.getElementById('estTotal').innerText = '₹0.00';
+                
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            },
+
+            // --- Live Tracking ---
+            refreshPrices: async function() {
+                const symbols = Object.keys(this.data.holdings);
+                if (symbols.length === 0) return;
+
+                document.getElementById('refreshIcon').classList.remove('hidden');
+
+                // Process sequentially to be gentle on the proxy
+                for (let symbol of symbols) {
+                    const result = await this.fetchStockPrice(symbol);
+                    if (result && this.data.holdings[symbol]) {
+                        this.data.holdings[symbol].currentPrice = result.price;
+                    }
+                }
+
+                this.saveData(); // Save updated current prices
+                this.updateUI(); // Re-render table
+                document.getElementById('refreshIcon').classList.add('hidden');
+            },
+
+            // --- Render UI ---
+            updateUI: function() {
+                // 1. Update Summary Stats
+                let investedVal = 0;
+                let currentVal = 0;
+
+                for (let symbol in this.data.holdings) {
+                    const h = this.data.holdings[symbol];
+                    const livePrice = h.currentPrice || h.avgPrice; // Fallback to avg if live not yet fetched
+                    investedVal += h.qty * h.avgPrice;
+                    currentVal += h.qty * livePrice;
+                }
+
+                const totalPnL = currentVal - investedVal;
+                
+                document.getElementById('dispCash').innerText = `₹${this.data.cash.toLocaleString('en-IN', {maximumFractionDigits: 2})}`;
+                document.getElementById('dispInvested').innerText = `₹${investedVal.toLocaleString('en-IN', {maximumFractionDigits: 2})}`;
+                
+                const pnlEl = document.getElementById('dispTotalPnL');
+                pnlEl.innerText = `${totalPnL >= 0 ? '+' : ''}₹${totalPnL.toLocaleString('en-IN', {maximumFractionDigits: 2})}`;
+                pnlEl.className = `text-lg font-bold font-mono ${totalPnL >= 0 ? 'text-bull' : 'text-bear'}`;
+
+                // 2. Render Holdings Table
+                const tbody = document.getElementById('holdingsTableBody');
+                tbody.innerHTML = '';
+                const symbols = Object.keys(this.data.holdings);
+
+                if (symbols.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No active positions. Buy a stock to see it here.</td></tr>';
+                } else {
+                    symbols.forEach(sym => {
+                        const h = this.data.holdings[sym];
+                        const curPrice = h.currentPrice || h.avgPrice;
+                        const pnl = (curPrice - h.avgPrice) * h.qty;
+                        const pnlPercent = ((curPrice - h.avgPrice) / h.avgPrice) * 100;
+                        
+                        const row = `
+                            <tr class="hover:bg-gray-800 transition-colors fade-in">
+                                <td class="p-3 font-bold text-white">${sym}</td>
+                                <td class="p-3 text-right text-gray-300">${h.qty}</td>
+                                <td class="p-3 text-right text-gray-400">₹${h.avgPrice.toFixed(2)}</td>
+                                <td class="p-3 text-right text-white font-bold">₹${curPrice.toFixed(2)}</td>
+                                <td class="p-3 text-right text-gray-300">₹${(curPrice * h.qty).toLocaleString('en-IN')}</td>
+                                <td class="p-3 text-right ${pnl >= 0 ? 'text-bull' : 'text-bear'}">
+                                    ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} <br>
+                                    <span class="text-xs opacity-75">(${pnlPercent.toFixed(2)}%)</span>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                }
+
+                // 3. Render History
+                const histBody = document.getElementById('historyTableBody');
+                histBody.innerHTML = '';
+                this.data.history.slice(0, 20).forEach(tx => {
+                    const row = `
+                        <tr>
+                            <td class="p-3 text-gray-500 text-xs">${tx.time}</td>
+                            <td class="p-3 font-bold text-white">${tx.symbol}</td>
+                            <td class="p-3">
+                                <span class="px-2 py-1 rounded text-xs font-bold ${tx.type === 'BUY' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}">${tx.type}</span>
+                            </td>
+                            <td class="p-3 text-right">${tx.qty}</td>
+                            <td class="p-3 text-right">₹${tx.price.toFixed(2)}</td>
+                            <td class="p-3 text-right text-gray-400">₹${tx.total.toLocaleString('en-IN')}</td>
+                        </tr>
+                    `;
+                    histBody.innerHTML += row;
+                });
+            },
+
+            checkMarketStatus: function() {
+                const now = new Date();
+                // UTC to IST offset is +5.5 hours
+                const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+                const ist = new Date(utc + (3600000 * 5.5));
+                
+                const day = ist.getDay();
+                const hour = ist.getHours();
+                const min = ist.getMinutes();
+                const totalMins = hour * 60 + min;
+
+                // Market Open: Mon(1)-Fri(5), 09:15 (555 mins) to 15:30 (930 mins)
+                const isOpen = (day >= 1 && day <= 5) && (totalMins >= 555 && totalMins <= 930);
+                
+                const statusEl = document.getElementById('marketStatus');
+                if (isOpen) {
+                    statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> MARKET OPEN';
+                    statusEl.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/30 border border-green-700 text-green-400 text-xs font-semibold";
+                } else {
+                    statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> MARKET CLOSED';
+                    statusEl.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-red-900/30 border border-red-700 text-red-400 text-xs font-semibold";
+                }
+            }
+        };
+
+        // Boot
+        window.addEventListener('DOMContentLoaded', () => app.init());
+
+    </script>
+</body>
+</html>
