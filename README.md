@@ -1,4 +1,3 @@
-# equity-sim-india
 # Technical Stack
 Frontend: HTML5, CSS3
 Logic: JavaScript (ES6+)
