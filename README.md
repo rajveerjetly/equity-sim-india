@@ -1,5 +1,7 @@
 # Dalal Street | Real-Time Market Strategy Engine
 
+Live Demo: https://rajveerjetly.github.io/equity-sim-india/
+
 # 📌 Project Overview
 Equity-Sim India is a technical proof-of-concept (PoC) designed to simulate the dynamics of the Indian Equity Market (NSE). This project was developed to bridge the gap between theoretical market knowledge and technical execution, providing a "Paper Trading" environment powered by real-time data streams.
 The goal was to build a tool that allows for Market Strategy Testing without capital risk, focusing on how live data affects decision-making in high-volatility environments.
